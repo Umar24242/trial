@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kelola Keuangan - PDF Export</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
+
+  <header class="p-4 bg-blue-600 dark:bg-blue-800 flex justify-between items-center">
+    <h1 class="text-2xl font-bold">Aplikasi Keuangan</h1>
+    <button id="toggleDark" class="bg-gray-200 dark:bg-gray-700 px-3 py-1 rounded">Ganti Mode</button>
+  </header>
+
+  <main class="p-4 space-y-4 max-w-2xl mx-auto">
+
+    <section class="bg-white dark:bg-gray-800 rounded shadow p-4">
+      <h2 class="text-xl font-semibold mb-2">Tambah Transaksi</h2>
+      <form id="formTransaksi" class="space-y-3" enctype="multipart/form-data">
+        <input type="text" id="deskripsi" placeholder="Deskripsi" required class="w-full p-2 rounded bg-gray-100 dark:bg-gray-700" />
+        <input type="text" id="jumlah" placeholder="Jumlah (Rp)" required class="w-full p-2 rounded bg-gray-100 dark:bg-gray-700" />
+        
+        <div class="space-y-2">
+          <label class="block text-sm font-medium">Upload Nota (Bisa lebih dari satu)</label>
+          <div class="flex gap-2 flex-wrap">
+            <input type="file" id="ambilFoto" accept="image/*" capture="environment" class="hidden" multiple />
+            <button type="button" onclick="document.getElementById('ambilFoto').click()" class="bg-green-600 text-white px-3 py-1 rounded">
+              Ambil Foto
+            </button>
+
+            <input type="file" id="ambilFile" accept="image/*" class="hidden" multiple />
+            <button type="button" onclick="document.getElementById('ambilFile').click()" class="bg-yellow-600 text-white px-3 py-1 rounded">
+              Pilih File
+            </button>
+          </div>
+        </div>
+
+        <div id="previewContainer" class="flex gap-2 flex-wrap mt-2"></div>
+
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded w-full">Tambah</button>
+      </form>
+    </section>
+
+    <section class="bg-white dark:bg-gray-800 rounded shadow p-4">
+      <h2 class="text-xl font-semibold mb-2">Total Saldo</h2>
+      <div id="saldo" class="text-2xl font-bold">Rp 0</div>
+    </section>
+
+    <section class="bg-white dark:bg-gray-800 rounded shadow p-4">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="text-xl font-semibold">Riwayat Transaksi</h2>
+        <button id="toggleRiwayat" class="bg-gray-300 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-3 py-1 rounded">
+          Lihat Riwayat
+        </button>
+      </div>
+      <ul id="riwayat" class="space-y-2 text-sm hidden"></ul>
+    </section>
+
+  </main>
+
+  <script>
+    const html = document.documentElement;
+    const toggleDark = document.getElementById('toggleDark');
+    const toggleRiwayat = document.getElementById('toggleRiwayat');
+    const form = document.getElementById('formTransaksi');
+    const riwayat = document.getElementById('riwayat');
+    const saldoDiv = document.getElementById('saldo');
+    const ambilFoto = document.getElementById('ambilFoto');
+    const ambilFile = document.getElementById('ambilFile');
+    const previewContainer = document.getElementById('previewContainer');
+    const jumlahInput = document.getElementById('jumlah');
+    let saldo = 0;
+    let fileNota = [];
+
+    toggleDark.onclick = () => html.classList.toggle('dark');
+
+    toggleRiwayat.onclick = () => {
+      riwayat.classList.toggle('hidden');
+      toggleRiwayat.textContent = riwayat.classList.contains('hidden') ? 'Lihat Riwayat' : 'Sembunyikan Riwayat';
+    };
+
+    function handleFileInput(files) {
+      for (const file of files) {
+        fileNota.push(file);
+        const imgURL = URL.createObjectURL(file);
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'relative w-24 h-24';
+
+        const img = document.createElement('img');
+        img.src = imgURL;
+        img.className = 'w-full h-full object-cover rounded shadow';
+
+        const btn = document.createElement('button');
+        btn.className = 'absolute top-0 right-0 bg-red-600 text-white rounded-full px-1 text-xs';
+        btn.textContent = '✕';
+        btn.onclick = () => {
+          wrapper.remove();
+          fileNota = fileNota.filter(f => f !== file);
+        };
+
+        wrapper.appendChild(img);
+        wrapper.appendChild(btn);
+        previewContainer.appendChild(wrapper);
+      }
+    }
+
+    ambilFoto.onchange = () => handleFileInput(ambilFoto.files);
+    ambilFile.onchange = () => handleFileInput(ambilFile.files);
+
+    jumlahInput.addEventListener('input', (e) => {
+      const cleanValue = e.target.value.replace(/[^0-9]/g, '');
+      e.target.value = cleanValue.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    });
+
+    function formatTanggal(date) {
+      const d = String(date.getDate()).padStart(2, '0');
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const y = date.getFullYear();
+      const h = String(date.getHours()).padStart(2, '0');
+      const mn = String(date.getMinutes()).padStart(2, '0');
+      return `${d}/${m}/${y} - ${h}:${mn}`;
+    }
+
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const deskripsi = document.getElementById('deskripsi').value.trim();
+      const jumlahClean = jumlahInput.value.replace(/\./g, '').replace(/,/g, '');
+      const jumlah = parseInt(jumlahClean);
+
+      if (!deskripsi || isNaN(jumlah)) return alert('Masukkan jumlah yang valid.');
+
+      saldo += jumlah;
+      saldoDiv.textContent = `Rp ${saldo.toLocaleString('id-ID')}`;
+
+      const item = document.createElement('li');
+      item.classList.add('border-b', 'pb-2');
+
+      const detailId = `detail-${Date.now()}`;
+      const tanggal = formatTanggal(new Date());
+
+      let notaImg = '';
+      if (fileNota.length > 0) {
+        notaImg = fileNota.map(file => {
+          const imgURL = URL.createObjectURL(file);
+          return `<img src="${imgURL}" alt="Nota" class="mt-1 max-w-xs rounded shadow">`;
+        }).join('');
+      }
+
+      item.innerHTML = `
+        <div class="flex justify-between items-start gap-2">
+          <div>
+            <strong>${deskripsi}</strong> <br>
+            <small class="text-gray-400">${tanggal}</small> <br>
+            <span class="text-gray-500">Rp ${jumlah.toLocaleString('id-ID')}</span>
+          </div>
+          <div class="flex flex-col gap-1">
+            <button type="button" onclick="document.getElementById('${detailId}').classList.toggle('hidden')" class="text-xs bg-gray-300 dark:bg-gray-600 px-2 py-0.5 rounded">Lihat Detail</button>
+            <button type="button" onclick="exportPDF('${detailId}', '${deskripsi}', '${tanggal}', ${jumlah})" class="text-xs bg-purple-600 text-white px-2 py-0.5 rounded">Export PDF</button>
+          </div>
+        </div>
+        <div id="${detailId}" class="hidden mt-2 space-y-1">${notaImg || '<span class="italic text-gray-400">Tidak ada nota</span>'}</div>
+      `;
+
+      riwayat.prepend(item);
+
+      form.reset();
+      previewContainer.innerHTML = '';
+      fileNota = [];
+    };
+
+    async function exportPDF(detailId, deskripsi, tanggal, jumlah) {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF();
+      pdf.setFontSize(16);
+      pdf.text(`Transaksi: ${deskripsi}`, 10, 20);
+      pdf.setFontSize(12);
+      pdf.text(`Tanggal: ${tanggal}`, 10, 30);
+      pdf.text(`Jumlah: Rp ${jumlah.toLocaleString('id-ID')}`, 10, 40);
+
+      const detail = document.getElementById(detailId);
+      if (detail.querySelector('img')) {
+        const canvas = await html2canvas(detail, { scale: 2 });
+        const imgData = canvas.toDataURL("image/png");
+        pdf.addImage(imgData, 'PNG', 10, 50, 180, 0);
+      }
+
+      pdf.save(`Transaksi_${deskripsi}_${tanggal.replace(/\W/g, '_')}.pdf`);
+    }
+  </script>
+
+</body>
+</html>
